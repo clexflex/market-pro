@@ -446,13 +446,3 @@ export {
   MarketShareDonut,
   CustomTooltip
 };
-
-export default {
-  EnhancedLineChart,
-  EnhancedAreaChart,
-  EnhancedBarChart,
-  EnhancedPieChart,
-  MarketGrowthChart,
-  RegionalComparisonChart,
-  MarketShareDonut
-};
