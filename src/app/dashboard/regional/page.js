@@ -1,3 +1,4 @@
+// src/app/dashboard/regional/page.js
 'use client';
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
@@ -26,7 +27,8 @@ import {
   Button,
   Progress,
   Select,
-  Alert
+  Alert,
+  LoadingSpinner
 } from '@/components/ui';
 import {
   EnhancedLineChart,
@@ -35,46 +37,110 @@ import {
   MarketShareDonut,
   RegionalComparisonChart
 } from '@/components/charts';
-import { 
-  marketData, 
-  regionalMarketData, 
-  countryData,
-  generateTimeSeriesData 
-} from '@/data/marketData';
+import { useMarketData } from '@/hooks/useMarketData';
 import { formatCurrency, formatPercentage, calculateCAGR, analyzeRegionalPerformance } from '@/lib/utils';
 
 const RegionalAnalysis = () => {
+  const { data: marketData, loading, error } = useMarketData();
   const [selectedRegion, setSelectedRegion] = useState('North America');
   const [selectedYear, setSelectedYear] = useState('2032');
-  const [viewMode, setViewMode] = useState('overview'); // overview, detailed, comparison
+  const [viewMode, setViewMode] = useState('overview');
+
+  // Show loading state
+  if (loading) {
+    return (
+      <DashboardLayout 
+        title="Regional Analysis" 
+        breadcrumb={['Dashboard', 'Regional Analysis']}
+      >
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <LoadingSpinner size="lg" className="mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Loading Regional Data...
+            </h3>
+            <p className="text-gray-600">
+              Processing regional market analysis
+            </p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <DashboardLayout 
+        title="Regional Analysis" 
+        breadcrumb={['Dashboard', 'Regional Analysis']}
+      >
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="text-red-600 mb-4">⚠️</div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Failed to Load Regional Data
+            </h3>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Extract data with null checks
+  const regions = marketData?.regions || [];
+  const countries = marketData?.countries || {};
+  const timeSeries = marketData?.timeSeries || {};
+
+  // Create regional market data from time series
+  const regionalMarketData = {};
+  Object.keys(timeSeries).forEach(region => {
+    if (timeSeries[region].Type) {
+      const regionTypeData = timeSeries[region].Type;
+      const years = [2024, 2025, 2026, 2027, 2028, 2029, 2030, 2031, 2032];
+      
+      regionalMarketData[region] = years.map(year => {
+        let totalValue = 0;
+        Object.keys(regionTypeData).forEach(type => {
+          const yearData = regionTypeData[type].find(d => d.year === year);
+          if (yearData) totalValue += yearData.value;
+        });
+        return { year, value: totalValue };
+      });
+    }
+  });
 
   // Analyze regional performance
   const regionalAnalysis = analyzeRegionalPerformance(regionalMarketData);
   
   // Current region data
-  const currentRegionInfo = marketData.regions.find(r => r.name === selectedRegion);
+  const currentRegionInfo = regions.find(r => r.name === selectedRegion) || {};
   const currentRegionData = regionalMarketData[selectedRegion] || [];
   
   // Calculate regional metrics
   const regionSize2024 = currentRegionData[0]?.value || 0;
   const regionSize2032 = currentRegionData[currentRegionData.length - 1]?.value || 0;
   const regionCAGR = calculateCAGR(regionSize2024, regionSize2032, 8);
-  const regionGrowth = ((regionSize2032 - regionSize2024) / regionSize2024) * 100;
+  const regionGrowth = regionSize2024 > 0 ? ((regionSize2032 - regionSize2024) / regionSize2024) * 100 : 0;
 
   // Market share data for selected year
   const yearIndex = selectedYear === '2024' ? 0 : selectedYear === '2032' ? 8 : 4;
   const regionalShareData = regionalAnalysis.regions.map(region => ({
     name: region.region,
     value: region.data[yearIndex]?.value || 0,
-    share: ((region.data[yearIndex]?.value || 0) / regionalAnalysis.totalMarket) * 100
+    share: ((region.data[yearIndex]?.value || 0) / (regionalAnalysis.totalMarket || 1)) * 100
   })).sort((a, b) => b.value - a.value);
 
   // Top performing countries (if region is selected)
-  const countryPerformance = Object.entries(countryData)
+  const countryPerformance = Object.entries(countries)
     .filter(([country, data]) => {
       // Filter countries by region (simplified mapping)
       const regionCountryMap = {
-        'North America': ['United States', 'Canada', 'Mexico'],
+        'North America': ['United States', 'Canada', 'Mexico', 'US'],
         'Europe': ['Germany', 'United Kingdom', 'France'],
         'Asia Pacific': ['China', 'Japan', 'South Korea'],
         'Latin America': ['Brazil', 'Argentina'],
@@ -97,19 +163,23 @@ const RegionalAnalysis = () => {
     {
       title: 'Market Leadership',
       icon: Star,
-      content: `${regionalAnalysis.largest.region} leads the global market with ${formatCurrency(regionalAnalysis.largest.endValue)} in ${selectedYear}`,
+      content: regionalAnalysis.largest ? 
+        `${regionalAnalysis.largest.region} leads the global market with ${formatCurrency(regionalAnalysis.largest.endValue)} in ${selectedYear}` :
+        'Regional leadership data not available',
       type: 'success'
     },
     {
       title: 'Fastest Growth',
       icon: TrendingUp,
-      content: `${regionalAnalysis.fastestGrowing.region} shows the highest growth rate at ${formatPercentage(regionalAnalysis.fastestGrowing.cagr)} CAGR`,
+      content: regionalAnalysis.fastestGrowing ? 
+        `${regionalAnalysis.fastestGrowing.region} shows the highest growth rate at ${formatPercentage(regionalAnalysis.fastestGrowing.cagr)} CAGR` :
+        'Growth analysis data not available',
       type: 'info'
     },
     {
       title: 'Market Opportunity',
       icon: Eye,
-      content: `${currentRegionInfo?.name} presents significant opportunities with ${formatPercentage(regionCAGR)} projected growth`,
+      content: `${currentRegionInfo?.name || selectedRegion} presents significant opportunities with ${formatPercentage(regionCAGR)} projected growth`,
       type: 'warning'
     }
   ];
@@ -142,7 +212,7 @@ const RegionalAnalysis = () => {
               className="min-w-[200px]"
             >
               <option value="Global">Global Overview</option>
-              {marketData.regions.map(region => (
+              {regions.map(region => (
                 <option key={region.name} value={region.name}>
                   {region.name}
                 </option>
@@ -274,45 +344,51 @@ const RegionalAnalysis = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="text-left py-3 px-4 font-semibold">Country</th>
-                      <th className="text-right py-3 px-4 font-semibold">Market Size 2024</th>
-                      <th className="text-right py-3 px-4 font-semibold">Market Size 2032</th>
-                      <th className="text-right py-3 px-4 font-semibold">CAGR</th>
-                      <th className="text-right py-3 px-4 font-semibold">Penetration</th>
-                      <th className="text-right py-3 px-4 font-semibold">Avg Spending</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {countryPerformance.slice(0, 10).map((country, index) => (
-                      <tr key={country.country} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-3 px-4">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-6 h-4 bg-gradient-to-r from-primary-500 to-secondary-500 rounded-sm flex items-center justify-center text-white text-xs font-bold">
-                              {index + 1}
-                            </div>
-                            <span className="font-medium">{country.country}</span>
-                          </div>
-                        </td>
-                        <td className="text-right py-3 px-4">{formatCurrency(country.marketSize2024)}</td>
-                        <td className="text-right py-3 px-4 font-semibold">{formatCurrency(country.marketSize2032)}</td>
-                        <td className="text-right py-3 px-4">
-                          <Badge 
-                            variant={country.cagr > 12 ? "success" : country.cagr > 8 ? "warning" : "secondary"}
-                          >
-                            {formatPercentage(country.cagr)}
-                          </Badge>
-                        </td>
-                        <td className="text-right py-3 px-4">{formatPercentage(country.penetration)}</td>
-                        <td className="text-right py-3 px-4">${country.avgSpending.toLocaleString()}</td>
+              {countryPerformance.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-3 px-4 font-semibold">Country</th>
+                        <th className="text-right py-3 px-4 font-semibold">Market Size 2024</th>
+                        <th className="text-right py-3 px-4 font-semibold">Market Size 2032</th>
+                        <th className="text-right py-3 px-4 font-semibold">CAGR</th>
+                        <th className="text-right py-3 px-4 font-semibold">Penetration</th>
+                        <th className="text-right py-3 px-4 font-semibold">Avg Spending</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {countryPerformance.slice(0, 10).map((country, index) => (
+                        <tr key={country.country} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="py-3 px-4">
+                            <div className="flex items-center space-x-2">
+                              <div className="w-6 h-4 bg-gradient-to-r from-primary-500 to-secondary-500 rounded-sm flex items-center justify-center text-white text-xs font-bold">
+                                {index + 1}
+                              </div>
+                              <span className="font-medium">{country.country}</span>
+                            </div>
+                          </td>
+                          <td className="text-right py-3 px-4">{formatCurrency(country.marketSize2024)}</td>
+                          <td className="text-right py-3 px-4 font-semibold">{formatCurrency(country.marketSize2032)}</td>
+                          <td className="text-right py-3 px-4">
+                            <Badge 
+                              variant={country.cagr > 12 ? "success" : country.cagr > 8 ? "warning" : "secondary"}
+                            >
+                              {formatPercentage(country.cagr)}
+                            </Badge>
+                          </td>
+                          <td className="text-right py-3 px-4">{formatPercentage(country.penetration)}</td>
+                          <td className="text-right py-3 px-4">${country.avgSpending.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No country data available for {selectedRegion}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
