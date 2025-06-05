@@ -1,3 +1,4 @@
+// src/components/layout/DashboardLayout.js
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
@@ -21,7 +22,9 @@ import {
   Filter,
   Users,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Upload,
+  RefreshCw
 } from 'lucide-react';
 import { Button, Badge } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -62,6 +65,13 @@ const navigation = [
     href: '/dashboard/competitive',
     icon: Users,
     description: 'Market players and positioning'
+  },
+  {
+    name: 'Data Management',
+    href: '/dashboard/data-management',
+    icon: Upload,
+    description: 'CSV upload and data processing',
+    badge: 'New'
   }
 ];
 
@@ -137,7 +147,7 @@ const DashboardSidebar = ({ isOpen, setIsOpen }) => {
                   whileHover={{ x: 4 }}
                   whileTap={{ scale: 0.98 }}
                   className={cn(
-                    "flex items-center px-3 py-3 rounded-lg text-sm font-medium transition-all duration-200",
+                    "flex items-center px-3 py-3 rounded-lg text-sm font-medium transition-all duration-200 relative",
                     isActive
                       ? "bg-primary-100 text-primary-700 shadow-sm border-l-4 border-primary-600"
                       : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
@@ -148,12 +158,22 @@ const DashboardSidebar = ({ isOpen, setIsOpen }) => {
                     isActive ? "text-primary-600" : "text-gray-400"
                   )} />
                   <div className="flex-1 min-w-0">
-                    <p className={cn(
-                      "font-medium truncate",
-                      isActive ? "text-primary-700" : "text-gray-700"
-                    )}>
-                      {item.name}
-                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className={cn(
+                        "font-medium truncate",
+                        isActive ? "text-primary-700" : "text-gray-700"
+                      )}>
+                        {item.name}
+                      </p>
+                      {item.badge && (
+                        <Badge 
+                          variant="success" 
+                          className="text-xs px-2 py-0.5 ml-2"
+                        >
+                          {item.badge}
+                        </Badge>
+                      )}
+                    </div>
                     <p className={cn(
                       "text-xs truncate mt-0.5",
                       isActive ? "text-primary-600" : "text-gray-500"
@@ -179,6 +199,10 @@ const DashboardSidebar = ({ isOpen, setIsOpen }) => {
           <Button variant="outline" className="w-full justify-start" size="sm">
             <Download className="w-4 h-4 mr-2" />
             Download Data
+          </Button>
+          <Button variant="outline" className="w-full justify-start" size="sm">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Sync Data
           </Button>
         </div>
       </div>
@@ -226,6 +250,12 @@ const DashboardHeader = ({ onMenuClick, title, breadcrumb }) => {
               placeholder="Search insights..."
               className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
             />
+          </div>
+
+          {/* Data Status Indicator */}
+          <div className="hidden sm:flex items-center space-x-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            <span className="text-xs text-green-700 font-medium">Data Live</span>
           </div>
 
           {/* Actions */}

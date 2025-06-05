@@ -212,7 +212,7 @@ export default function HomePage() {
 
             <div className="space-y-6">
               <h5 className="text-xl font-semibold text-gray-900">
-                What's Inside the Dashboard
+                What&apos;s Inside the Dashboard
               </h5>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-left">
                 {[

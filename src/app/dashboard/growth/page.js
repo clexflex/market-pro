@@ -44,17 +44,17 @@ import {
 } from '@/data/marketData';
 import { formatCurrency, formatPercentage, calculateCAGR } from '@/lib/utils';
 
+// Move scenarios outside component to avoid dependency array issue
+const scenarios = {
+  conservative: { label: 'Conservative', modifier: 0.85, color: 'text-red-600' },
+  base: { label: 'Base Case', modifier: 1.0, color: 'text-blue-600' },
+  optimistic: { label: 'Optimistic', modifier: 1.15, color: 'text-green-600' }
+};
+
 const GrowthAnalysis = () => {
   const [selectedScenario, setSelectedScenario] = useState('base');
   const [selectedTimeframe, setSelectedTimeframe] = useState('full'); // full, short, long
   const [focusMetric, setFocusMetric] = useState('revenue'); // revenue, growth, penetration
-
-  // Growth scenarios
-  const scenarios = {
-    conservative: { label: 'Conservative', modifier: 0.85, color: 'text-red-600' },
-    base: { label: 'Base Case', modifier: 1.0, color: 'text-blue-600' },
-    optimistic: { label: 'Optimistic', modifier: 1.15, color: 'text-green-600' }
-  };
 
   // Calculate scenario-based projections
   const getScenarioData = useMemo(() => {
@@ -68,7 +68,7 @@ const GrowthAnalysis = () => {
       timeSeriesData: generateTimeSeriesData(marketData.overview.marketSizeBase, adjustedCAGR),
       totalGrowth: ((marketData.overview.marketSizeBase * Math.pow(1 + adjustedCAGR / 100, 8) * modifier - marketData.overview.marketSizeBase) / marketData.overview.marketSizeBase) * 100
     };
-  }, [selectedScenario]);
+  }, [selectedScenario]); // scenarios is now stable, so removed from dependencies
 
   // Growth drivers analysis
   const growthDrivers = [

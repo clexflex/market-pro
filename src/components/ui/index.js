@@ -301,8 +301,8 @@ export const Progress = ({ value = 0, className, ...props }) => (
   </div>
 );
 
-// Export all components
-export default {
+// Create a named object for the default export
+const UIComponents = {
   Card,
   CardHeader,
   CardTitle,
@@ -321,3 +321,6 @@ export default {
   Separator,
   Progress
 };
+
+// Export all components
+export default UIComponents;
