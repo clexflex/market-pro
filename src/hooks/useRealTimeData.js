@@ -107,7 +107,7 @@ export const useRealTimeData = (options = {}) => {
     } finally {
       setIsLoading(false);
     }
-  }, [enableValidation, enableCaching, onDataUpdate, onError]);
+}, [enableValidation, enableCaching, onDataUpdate, onError, validationResults]);
 
   /**
    * Refresh current data source

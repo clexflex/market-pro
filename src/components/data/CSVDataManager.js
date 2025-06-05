@@ -48,46 +48,8 @@ const CSVDataManager = ({ onDataUpdate }) => {
     }
   }, []);
 
-  // Handle file drop
-  const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    
-    const files = Array.from(e.dataTransfer.files);
-    const csvFile = files.find(file => 
-      file.type === 'text/csv' || 
-      file.name.toLowerCase().endsWith('.csv')
-    );
-    
-    if (csvFile) {
-      handleFileUpload(csvFile);
-    } else {
-      setError('Please upload a valid CSV file');
-    }
-  }, []);
-
-  // Handle drag over
-  const handleDragOver = useCallback((e) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  }, []);
-
-  // Handle drag leave
-  const handleDragLeave = useCallback((e) => {
-    e.preventDefault();
-    setIsDragOver(false);
-  }, []);
-
-  // Handle file input change
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      handleFileUpload(file);
-    }
-  };
-
   // Handle file upload and processing
-  const handleFileUpload = async (file) => {
+const handleFileUpload = useCallback(async (file) => {
     setIsLoading(true);
     setError(null);
     setSuccess(null);
@@ -133,7 +95,47 @@ const CSVDataManager = ({ onDataUpdate }) => {
       setIsLoading(false);
       setTimeout(() => setUploadProgress(0), 2000);
     }
+  }, [onDataUpdate]);
+
+  // Handle file drop
+const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    
+    const files = Array.from(e.dataTransfer.files);
+    const csvFile = files.find(file => 
+      file.type === 'text/csv' || 
+      file.name.toLowerCase().endsWith('.csv')
+    );
+    
+    if (csvFile) {
+      handleFileUpload(csvFile);
+    } else {
+      setError('Please upload a valid CSV file');
+    }
+}, [handleFileUpload]);
+
+  // Handle drag over
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  // Handle drag leave
+  const handleDragLeave = useCallback((e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  }, []);
+
+  // Handle file input change
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      handleFileUpload(file);
+    }
   };
+
+  
 
   // Generate statistics from processed data
   const generateDataStats = (data) => {
