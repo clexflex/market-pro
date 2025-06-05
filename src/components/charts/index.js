@@ -435,14 +435,3 @@ export const MarketShareDonut = ({
   );
 };
 
-// Export all chart components
-export {
-  EnhancedLineChart,
-  EnhancedAreaChart,
-  EnhancedBarChart,
-  EnhancedPieChart,
-  MarketGrowthChart,
-  RegionalComparisonChart,
-  MarketShareDonut,
-  CustomTooltip
-};
