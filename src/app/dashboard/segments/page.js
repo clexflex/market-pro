@@ -28,7 +28,8 @@ import {
   Progress,
   Select,
   Alert,
-  Separator
+  Separator,
+  LoadingSpinner
 } from '@/components/ui';
 import {
   EnhancedLineChart,
@@ -37,28 +38,71 @@ import {
   MarketShareDonut,
   MarketGrowthChart
 } from '@/components/charts';
-import { 
-  marketData, 
-  productTypeData,
-  ingredientData,
-  generateTimeSeriesData 
-} from '@/data/marketData';
+import { useMarketData } from '@/hooks/useMarketData';
 import { formatCurrency, formatPercentage, calculateCAGR, getMarketSegmentInsights } from '@/lib/utils';
 
 const MarketSegments = () => {
+  const { data: marketData, loading, error } = useMarketData();
   const [selectedSegmentType, setSelectedSegmentType] = useState('productType');
   const [selectedTimeframe, setSelectedTimeframe] = useState('2032');
   const [viewMode, setViewMode] = useState('overview'); // overview, detailed, trends
 
+  // Show loading state
+  if (loading) {
+    return (
+      <DashboardLayout 
+        title="Market Segments" 
+        breadcrumb={['Dashboard', 'Market Segments']}
+      >
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <LoadingSpinner size="lg" className="mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Loading Market Segments...
+            </h3>
+            <p className="text-gray-600">
+              Processing segmentation analysis
+            </p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <DashboardLayout 
+        title="Market Segments" 
+        breadcrumb={['Dashboard', 'Market Segments']}
+      >
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="text-red-600 mb-4">⚠️</div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Failed to Load Segment Data
+            </h3>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   // Calculate segment data based on selection
   const getSegmentData = () => {
+    if (!marketData) return [];
+    
     const baseYear = 2024;
     const forecastYear = 2032;
     const totalMarket = marketData.overview.marketSizeForecast;
 
     switch (selectedSegmentType) {
       case 'productType':
-        return marketData.productTypes.map(product => ({
+        return marketData.productTypes?.map(product => ({
           ...product,
           value2024: (marketData.overview.marketSizeBase * product.marketShare2024) / 100,
           value2032: (totalMarket * product.marketShare2032) / 100,
@@ -66,10 +110,10 @@ const MarketSegments = () => {
             (marketData.overview.marketSizeBase * product.marketShare2024) / 100,
             product.cagr
           )
-        }));
+        })) || [];
       
       case 'ingredient':
-        return marketData.ingredients.map(ingredient => ({
+        return marketData.ingredients?.map(ingredient => ({
           ...ingredient,
           value2024: (marketData.overview.marketSizeBase * ingredient.marketShare2024) / 100,
           value2032: (totalMarket * ingredient.marketShare2032) / 100,
@@ -77,10 +121,10 @@ const MarketSegments = () => {
             (marketData.overview.marketSizeBase * ingredient.marketShare2024) / 100,
             ingredient.cagr
           )
-        }));
+        })) || [];
       
       case 'gender':
-        return marketData.gender.map(gender => ({
+        return marketData.gender?.map(gender => ({
           ...gender,
           value2024: (marketData.overview.marketSizeBase * gender.marketShare2024) / 100,
           value2032: (totalMarket * gender.marketShare2032) / 100,
@@ -89,10 +133,10 @@ const MarketSegments = () => {
             (marketData.overview.marketSizeBase * gender.marketShare2024) / 100,
             gender.cagr
           )
-        }));
+        })) || [];
       
       case 'endUser':
-        return marketData.endUsers.map(endUser => ({
+        return marketData.endUsers?.map(endUser => ({
           ...endUser,
           value2024: (marketData.overview.marketSizeBase * endUser.marketShare2024) / 100,
           value2032: (totalMarket * endUser.marketShare2032) / 100,
@@ -101,11 +145,24 @@ const MarketSegments = () => {
             (marketData.overview.marketSizeBase * endUser.marketShare2024) / 100,
             endUser.cagr
           )
-        }));
+        })) || [];
       
       default:
         return [];
     }
+  };
+
+  // Generate time series data
+  const generateTimeSeriesData = (baseValue, cagr, startYear = 2024, endYear = 2032) => {
+    const data = [];
+    for (let year = startYear; year <= endYear; year++) {
+      const value = baseValue * Math.pow(1 + cagr / 100, year - startYear);
+      data.push({
+        year,
+        value: Math.round(value * 100) / 100
+      });
+    }
+    return data;
   };
 
   const segmentData = getSegmentData();
@@ -134,9 +191,9 @@ const MarketSegments = () => {
   // Calculate key metrics
   const totalSegmentValue = segmentData.reduce((sum, segment) => sum + segment[selectedYearValue], 0);
   const leadingSegment = segmentData.reduce((a, b) => 
-    a[selectedYearValue] > b[selectedYearValue] ? a : b
+    a[selectedYearValue] > b[selectedYearValue] ? a : b, segmentData[0] || {}
   );
-  const fastestGrowingSegment = segmentData.reduce((a, b) => a.cagr > b.cagr ? a : b);
+  const fastestGrowingSegment = segmentData.reduce((a, b) => a.cagr > b.cagr ? a : b, segmentData[0] || {});
   const averageCAGR = segmentData.reduce((sum, segment) => sum + segment.cagr, 0) / segmentData.length;
 
   // Segment type configurations
@@ -239,28 +296,28 @@ const MarketSegments = () => {
           {[
             {
               title: 'Leading Segment',
-              value: leadingSegment.name,
+              value: leadingSegment.name || 'N/A',
               subtitle: `${formatPercentage(leadingSegment.marketShare2032 || leadingSegment.marketShare2024)} market share`,
-              trend: leadingSegment.cagr,
+              trend: leadingSegment.cagr || 0,
               icon: Star
             },
             {
               title: 'Fastest Growing',
-              value: fastestGrowingSegment.name,
-              subtitle: `${formatPercentage(fastestGrowingSegment.cagr)} CAGR`,
-              trend: fastestGrowingSegment.cagr,
+              value: fastestGrowingSegment.name || 'N/A',
+              subtitle: `${formatPercentage(fastestGrowingSegment.cagr || 0)} CAGR`,
+              trend: fastestGrowingSegment.cagr || 0,
               icon: TrendingUp
             },
             {
               title: 'Total Segment Value',
               value: formatCurrency(totalSegmentValue),
               subtitle: `${selectedTimeframe} market size`,
-              trend: averageCAGR,
+              trend: averageCAGR || 0,
               icon: BarChart3
             },
             {
               title: 'Average Growth',
-              value: formatPercentage(averageCAGR),
+              value: formatPercentage(averageCAGR || 0),
               subtitle: 'Segment CAGR average',
               trend: averageCAGR > 10 ? 5.2 : 2.1,
               icon: TrendingUp
@@ -312,20 +369,22 @@ const MarketSegments = () => {
         </div>
 
         {/* Segment Evolution */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-        >
-          <EnhancedLineChart
-            data={segmentData[0]?.timeSeriesData || []}
-            title={`${leadingSegment.name} Evolution`}
-            description="Market size progression over forecast period"
-            lines={['value']}
-            height={350}
-            formatter={(value) => formatCurrency(value)}
-          />
-        </motion.div>
+        {leadingSegment.timeSeriesData && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+          >
+            <EnhancedLineChart
+              data={leadingSegment.timeSeriesData}
+              title={`${leadingSegment.name} Evolution`}
+              description="Market size progression over forecast period"
+              lines={['value']}
+              height={350}
+              formatter={(value) => formatCurrency(value)}
+            />
+          </motion.div>
+        )}
 
         {/* Detailed Segment Analysis */}
         <motion.div

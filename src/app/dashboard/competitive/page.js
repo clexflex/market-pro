@@ -33,7 +33,8 @@ import {
   Progress,
   Select,
   Alert,
-  Separator
+  Separator,
+  LoadingSpinner
 } from '@/components/ui';
 import {
   EnhancedLineChart,
@@ -41,19 +42,77 @@ import {
   EnhancedBarChart,
   MarketShareDonut
 } from '@/components/charts';
-import { 
-  marketData,
-  generateTimeSeriesData 
-} from '@/data/marketData';
+import { useMarketData } from '@/hooks/useMarketData';
 import { formatCurrency, formatPercentage, formatNumber } from '@/lib/utils';
 
 const CompetitiveAnalysis = () => {
+  const { data: marketData, loading, error } = useMarketData();
   const [selectedView, setSelectedView] = useState('overview'); // overview, detailed, positioning
   const [selectedMetric, setSelectedMetric] = useState('marketShare'); // marketShare, revenue, growth
   const [timeframe, setTimeframe] = useState('current'); // current, historical, projected
 
+  // Show loading state
+  if (loading) {
+    return (
+      <DashboardLayout 
+        title="Competitive Analysis" 
+        breadcrumb={['Dashboard', 'Competitive Analysis']}
+      >
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <LoadingSpinner size="lg" className="mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Loading Competitive Analysis...
+            </h3>
+            <p className="text-gray-600">
+              Processing competitive landscape data
+            </p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <DashboardLayout 
+        title="Competitive Analysis" 
+        breadcrumb={['Dashboard', 'Competitive Analysis']}
+      >
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="text-red-600 mb-4">⚠️</div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Failed to Load Competitive Data
+            </h3>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Generate time series data
+  const generateTimeSeriesData = (baseValue, cagr, startYear = 2016, endYear = 2023) => {
+    const data = [];
+    for (let year = startYear; year <= endYear; year++) {
+      const value = baseValue * Math.pow(1 + cagr / 100, year - startYear);
+      data.push({
+        year,
+        value: Math.round(value * 100) / 100
+      });
+    }
+    return data;
+  };
+
   // Enhanced competitive data with more details
   const competitiveData = useMemo(() => {
+    if (!marketData?.marketPlayers) return [];
+    
     const players = marketData.marketPlayers.map((player, index) => {
       const baseRevenue = player.revenue2023;
       const marketShare = player.marketShare;
@@ -91,7 +150,7 @@ const CompetitiveAnalysis = () => {
     });
 
     return players;
-  }, []);
+  }, [marketData]);
 
   // Market concentration analysis
   const marketConcentration = useMemo(() => {

@@ -30,17 +30,14 @@ import {
   Input,
   Select,
   Progress,
-  Separator
+  Separator,
+  LoadingSpinner
 } from '@/components/ui';
-import { 
-  marketData, 
-  regionalMarketData,
-  countryData,
-  generateTimeSeriesData 
-} from '@/data/marketData';
+import { useMarketData } from '@/hooks/useMarketData';
 import { formatCurrency, formatPercentage, downloadCSV, debounce } from '@/lib/utils';
 
 const DataExplorer = () => {
+  const { data: marketData, loading, error } = useMarketData();
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
@@ -57,134 +54,192 @@ const DataExplorer = () => {
     year: '2032'
   });
 
-  // Generate comprehensive dataset
+  // Show loading state
+  if (loading) {
+    return (
+      <DashboardLayout 
+        title="Data Explorer" 
+        breadcrumb={['Dashboard', 'Data Explorer']}
+      >
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <LoadingSpinner size="lg" className="mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Loading Data Explorer...
+            </h3>
+            <p className="text-gray-600">
+              Processing comprehensive dataset
+            </p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <DashboardLayout 
+        title="Data Explorer" 
+        breadcrumb={['Dashboard', 'Data Explorer']}
+      >
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="text-red-600 mb-4">⚠️</div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Failed to Load Data
+            </h3>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Generate comprehensive dataset from market data
   const generateDataset = useMemo(() => {
+    if (!marketData) return [];
+    
     const dataset = [];
     
     // Add regional data
-    marketData.regions.forEach(region => {
-      const regionMarketData = regionalMarketData[region.name] || [];
-      const size2024 = regionMarketData[0]?.value || 0;
-      const size2032 = regionMarketData[regionMarketData.length - 1]?.value || 0;
-      
-      dataset.push({
-        id: `region-${region.name}`,
-        type: 'Region',
-        name: region.name,
-        segment: 'Geographic',
-        marketSize2024: size2024,
-        marketSize2032: size2032,
-        marketShare2024: region.marketShare2024 || 0,
-        marketShare2032: region.marketShare2032 || 0,
-        cagr: region.cagr || 0,
-        growth: size2024 > 0 ? ((size2032 - size2024) / size2024) * 100 : 0,
-        keyMarkets: region.keyMarkets?.join(', ') || '',
-        drivers: region.marketDrivers?.join(', ') || ''
+    if (marketData.regions) {
+      marketData.regions.forEach((region, index) => {
+        const size2024 = (marketData.overview.marketSizeBase * region.marketShare2024) / 100;
+        const size2032 = (marketData.overview.marketSizeForecast * region.marketShare2032) / 100;
+        
+        dataset.push({
+          id: `region-${region.name}`,
+          type: 'Region',
+          name: region.name,
+          segment: 'Geographic',
+          marketSize2024: size2024,
+          marketSize2032: size2032,
+          marketShare2024: region.marketShare2024,
+          marketShare2032: region.marketShare2032,
+          cagr: region.cagr,
+          growth: size2024 > 0 ? ((size2032 - size2024) / size2024) * 100 : 0,
+          keyMarkets: region.keyMarkets?.join(', ') || '',
+          drivers: region.marketDrivers?.join(', ') || ''
+        });
       });
-    });
+    }
 
     // Add product type data
-    marketData.productTypes.forEach(product => {
-      const size2024 = (marketData.overview.marketSizeBase * product.marketShare2024) / 100;
-      const size2032 = (marketData.overview.marketSizeForecast * product.marketShare2032) / 100;
-      
-      dataset.push({
-        id: `product-${product.name}`,
-        type: 'Product Type',
-        name: product.name,
-        segment: 'Product',
-        marketSize2024: size2024,
-        marketSize2032: size2032,
-        marketShare2024: product.marketShare2024,
-        marketShare2032: product.marketShare2032,
-        cagr: product.cagr,
-        growth: ((size2032 - size2024) / size2024) * 100,
-        applications: product.applications?.join(', ') || '',
-        description: product.description || ''
+    if (marketData.productTypes) {
+      marketData.productTypes.forEach((product) => {
+        const size2024 = (marketData.overview.marketSizeBase * product.marketShare2024) / 100;
+        const size2032 = (marketData.overview.marketSizeForecast * product.marketShare2032) / 100;
+        
+        dataset.push({
+          id: `product-${product.name}`,
+          type: 'Product Type',
+          name: product.name,
+          segment: 'Product',
+          marketSize2024: size2024,
+          marketSize2032: size2032,
+          marketShare2024: product.marketShare2024,
+          marketShare2032: product.marketShare2032,
+          cagr: product.cagr,
+          growth: ((size2032 - size2024) / size2024) * 100,
+          applications: product.applications?.join(', ') || '',
+          description: product.description || ''
+        });
       });
-    });
+    }
 
     // Add ingredient data
-    marketData.ingredients.forEach(ingredient => {
-      const size2024 = (marketData.overview.marketSizeBase * ingredient.marketShare2024) / 100;
-      const size2032 = (marketData.overview.marketSizeForecast * ingredient.marketShare2032) / 100;
-      
-      dataset.push({
-        id: `ingredient-${ingredient.name}`,
-        type: 'Ingredient',
-        name: ingredient.name,
-        segment: 'Ingredient',
-        marketSize2024: size2024,
-        marketSize2032: size2032,
-        marketShare2024: ingredient.marketShare2024,
-        marketShare2032: ingredient.marketShare2032,
-        cagr: ingredient.cagr,
-        growth: ((size2032 - size2024) / size2024) * 100,
-        benefits: ingredient.benefits?.join(', ') || ''
+    if (marketData.ingredients) {
+      marketData.ingredients.forEach((ingredient) => {
+        const size2024 = (marketData.overview.marketSizeBase * ingredient.marketShare2024) / 100;
+        const size2032 = (marketData.overview.marketSizeForecast * ingredient.marketShare2032) / 100;
+        
+        dataset.push({
+          id: `ingredient-${ingredient.name}`,
+          type: 'Ingredient',
+          name: ingredient.name,
+          segment: 'Ingredient',
+          marketSize2024: size2024,
+          marketSize2032: size2032,
+          marketShare2024: ingredient.marketShare2024,
+          marketShare2032: ingredient.marketShare2032,
+          cagr: ingredient.cagr,
+          growth: ((size2032 - size2024) / size2024) * 100,
+          benefits: ingredient.benefits?.join(', ') || ''
+        });
       });
-    });
+    }
 
     // Add gender segment data
-    marketData.gender.forEach(gender => {
-      const size2024 = (marketData.overview.marketSizeBase * gender.marketShare2024) / 100;
-      const size2032 = (marketData.overview.marketSizeForecast * gender.marketShare2032) / 100;
-      
-      dataset.push({
-        id: `gender-${gender.name}`,
-        type: 'Demographics',
-        name: gender.name,
-        segment: 'Gender',
-        marketSize2024: size2024,
-        marketSize2032: size2032,
-        marketShare2024: gender.marketShare2024,
-        marketShare2032: gender.marketShare2032,
-        cagr: gender.cagr,
-        growth: ((size2032 - size2024) / size2024) * 100,
-        ageGroups: gender.ageGroups?.join(', ') || ''
+    if (marketData.gender) {
+      marketData.gender.forEach((gender) => {
+        const size2024 = (marketData.overview.marketSizeBase * gender.marketShare2024) / 100;
+        const size2032 = (marketData.overview.marketSizeForecast * gender.marketShare2032) / 100;
+        
+        dataset.push({
+          id: `gender-${gender.name}`,
+          type: 'Demographics',
+          name: gender.name,
+          segment: 'Gender',
+          marketSize2024: size2024,
+          marketSize2032: size2032,
+          marketShare2024: gender.marketShare2024,
+          marketShare2032: gender.marketShare2032,
+          cagr: gender.cagr,
+          growth: ((size2032 - size2024) / size2024) * 100,
+          ageGroups: gender.ageGroups?.join(', ') || ''
+        });
       });
-    });
+    }
 
     // Add end user data
-    marketData.endUsers.forEach(endUser => {
-      const size2024 = (marketData.overview.marketSizeBase * endUser.marketShare2024) / 100;
-      const size2032 = (marketData.overview.marketSizeForecast * endUser.marketShare2032) / 100;
-      
-      dataset.push({
-        id: `enduser-${endUser.name}`,
-        type: 'End User',
-        name: endUser.name,
-        segment: 'Channel',
-        marketSize2024: size2024,
-        marketSize2032: size2032,
-        marketShare2024: endUser.marketShare2024,
-        marketShare2032: endUser.marketShare2032,
-        cagr: endUser.cagr,
-        growth: ((size2032 - size2024) / size2024) * 100,
-        characteristics: endUser.characteristics?.join(', ') || ''
+    if (marketData.endUsers) {
+      marketData.endUsers.forEach((endUser) => {
+        const size2024 = (marketData.overview.marketSizeBase * endUser.marketShare2024) / 100;
+        const size2032 = (marketData.overview.marketSizeForecast * endUser.marketShare2032) / 100;
+        
+        dataset.push({
+          id: `enduser-${endUser.name}`,
+          type: 'End User',
+          name: endUser.name,
+          segment: 'Channel',
+          marketSize2024: size2024,
+          marketSize2032: size2032,
+          marketShare2024: endUser.marketShare2024,
+          marketShare2032: endUser.marketShare2032,
+          cagr: endUser.cagr,
+          growth: ((size2032 - size2024) / size2024) * 100,
+          characteristics: endUser.characteristics?.join(', ') || ''
+        });
       });
-    });
+    }
 
     // Add country data
-    Object.entries(countryData).forEach(([country, data]) => {
-      dataset.push({
-        id: `country-${country}`,
-        type: 'Country',
-        name: country,
-        segment: 'Geographic',
-        marketSize2024: data.marketSize2024,
-        marketSize2032: data.marketSize2032,
-        marketShare2024: (data.marketSize2024 / marketData.overview.marketSizeBase) * 100,
-        marketShare2032: (data.marketSize2032 / marketData.overview.marketSizeForecast) * 100,
-        cagr: data.cagr,
-        growth: ((data.marketSize2032 - data.marketSize2024) / data.marketSize2024) * 100,
-        population: data.population,
-        penetrationRate: data.penetrationRate,
-        avgSpending: data.averageSpending
+    if (marketData.countries) {
+      Object.entries(marketData.countries).forEach(([country, data]) => {
+        dataset.push({
+          id: `country-${country}`,
+          type: 'Country',
+          name: country,
+          segment: 'Geographic',
+          marketSize2024: data.marketSize2024,
+          marketSize2032: data.marketSize2032,
+          marketShare2024: (data.marketSize2024 / marketData.overview.marketSizeBase) * 100,
+          marketShare2032: (data.marketSize2032 / marketData.overview.marketSizeForecast) * 100,
+          cagr: data.cagr,
+          growth: ((data.marketSize2032 - data.marketSize2024) / data.marketSize2024) * 100,
+          population: data.population,
+          penetrationRate: data.penetrationRate,
+          avgSpending: data.averageSpending
+        });
       });
-    });
+    }
 
     return dataset;
-  }, []);
+  }, [marketData]);
 
   // Apply filters and search
   const filteredData = useMemo(() => {

@@ -28,7 +28,8 @@ import {
   Button,
   Progress,
   Select,
-  Alert
+  Alert,
+  LoadingSpinner
 } from '@/components/ui';
 import {
   EnhancedLineChart,
@@ -36,12 +37,7 @@ import {
   EnhancedBarChart,
   MarketGrowthChart
 } from '@/components/charts';
-import { 
-  marketData, 
-  regionalMarketData,
-  marketTrends,
-  generateTimeSeriesData 
-} from '@/data/marketData';
+import { useMarketData } from '@/hooks/useMarketData';
 import { formatCurrency, formatPercentage, calculateCAGR } from '@/lib/utils';
 
 // Move scenarios outside component to avoid dependency array issue
@@ -52,12 +48,73 @@ const scenarios = {
 };
 
 const GrowthAnalysis = () => {
+  const { data: marketData, loading, error } = useMarketData();
   const [selectedScenario, setSelectedScenario] = useState('base');
   const [selectedTimeframe, setSelectedTimeframe] = useState('full'); // full, short, long
   const [focusMetric, setFocusMetric] = useState('revenue'); // revenue, growth, penetration
 
+  // Show loading state
+  if (loading) {
+    return (
+      <DashboardLayout 
+        title="Growth Analysis" 
+        breadcrumb={['Dashboard', 'Growth Analysis']}
+      >
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <LoadingSpinner size="lg" className="mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Loading Growth Analysis...
+            </h3>
+            <p className="text-gray-600">
+              Processing market forecasting data
+            </p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <DashboardLayout 
+        title="Growth Analysis" 
+        breadcrumb={['Dashboard', 'Growth Analysis']}
+      >
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="text-red-600 mb-4">⚠️</div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Failed to Load Growth Data
+            </h3>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Generate time series data for market growth
+  const generateTimeSeriesData = (baseValue, cagr, startYear = 2024, endYear = 2032) => {
+    const data = [];
+    for (let year = startYear; year <= endYear; year++) {
+      const value = baseValue * Math.pow(1 + cagr / 100, year - startYear);
+      data.push({
+        year,
+        value: Math.round(value * 100) / 100
+      });
+    }
+    return data;
+  };
+
   // Calculate scenario-based projections
   const getScenarioData = useMemo(() => {
+    if (!marketData?.overview) return { cagr: 0, marketSize2032: 0, timeSeriesData: [], totalGrowth: 0 };
+    
     const modifier = scenarios[selectedScenario].modifier;
     const baseCAGR = marketData.overview.cagr;
     const adjustedCAGR = baseCAGR * modifier;
@@ -68,7 +125,7 @@ const GrowthAnalysis = () => {
       timeSeriesData: generateTimeSeriesData(marketData.overview.marketSizeBase, adjustedCAGR),
       totalGrowth: ((marketData.overview.marketSizeBase * Math.pow(1 + adjustedCAGR / 100, 8) * modifier - marketData.overview.marketSizeBase) / marketData.overview.marketSizeBase) * 100
     };
-  }, [selectedScenario]); // scenarios is now stable, so removed from dependencies
+  }, [selectedScenario, marketData]); 
 
   // Growth drivers analysis
   const growthDrivers = [
@@ -164,21 +221,28 @@ const GrowthAnalysis = () => {
     }));
   }, [getScenarioData]);
 
-  // Regional growth comparison
-  const regionalGrowthData = Object.entries(regionalMarketData).map(([region, data]) => {
-    const startValue = data[0].value;
-    const endValue = data[data.length - 1].value;
-    const cagr = calculateCAGR(startValue, endValue, 8);
+  // Regional growth comparison using real data
+  const regionalGrowthData = useMemo(() => {
+    if (!marketData?.regions) return [];
     
-    return {
-      region,
-      cagr,
-      startValue,
-      endValue,
-      totalGrowth: ((endValue - startValue) / startValue) * 100,
-      data: data.map(point => ({ ...point, growth: ((point.value - startValue) / startValue) * 100 }))
-    };
-  });
+    return marketData.regions.map(region => {
+      const startValue = (marketData.overview.marketSizeBase * region.marketShare2024) / 100;
+      const endValue = (marketData.overview.marketSizeForecast * region.marketShare2032) / 100;
+      const cagr = region.cagr;
+      
+      return {
+        region: region.name,
+        cagr,
+        startValue,
+        endValue,
+        totalGrowth: ((endValue - startValue) / startValue) * 100,
+        data: generateTimeSeriesData(startValue, cagr).map(point => ({ 
+          ...point, 
+          growth: ((point.value - startValue) / startValue) * 100 
+        }))
+      };
+    });
+  }, [marketData]);
 
   // Key growth insights
   const growthInsights = [
@@ -199,6 +263,34 @@ const GrowthAnalysis = () => {
       icon: Activity,
       content: 'Market entering rapid growth phase with strong fundamentals supporting expansion',
       type: 'warning'
+    }
+  ];
+
+  // Market trends from real data
+  const marketTrends = marketData?.trends || [
+    {
+      trend: "Rising Demand for Non-Invasive Procedures",
+      impact: "High",
+      description: "Consumers increasingly prefer minimally invasive treatments with minimal downtime and natural-looking results",
+      regions: ["North America", "Europe", "Asia Pacific"]
+    },
+    {
+      trend: "Growing Male Market Segment",
+      impact: "Medium",
+      description: "Increasing acceptance of aesthetic treatments among male consumers, especially in urban areas",
+      regions: ["North America", "Europe"]
+    },
+    {
+      trend: "Technological Advancements in Delivery Systems",
+      impact: "High", 
+      description: "Development of new ingredients and delivery methods enhancing treatment efficacy and patient comfort",
+      regions: ["Global"]
+    },
+    {
+      trend: "Medical Tourism Growth",
+      impact: "Medium",
+      description: "Cross-border travel for affordable and high-quality aesthetic treatments driving regional markets",
+      regions: ["Asia Pacific", "Latin America", "Middle East & Africa"]
     }
   ];
 
