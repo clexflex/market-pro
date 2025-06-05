@@ -51,6 +51,95 @@ const CompetitiveAnalysis = () => {
   const [selectedMetric, setSelectedMetric] = useState('marketShare'); // marketShare, revenue, growth
   const [timeframe, setTimeframe] = useState('current'); // current, historical, projected
 
+ 
+
+  // Enhanced competitive data with more details - MOVED BEFORE EARLY RETURNS
+  const competitiveData = useMemo(() => {
+    
+    if (!marketData?.marketPlayers) return [];
+    
+    const players = marketData.marketPlayers.map((player, index) => {
+      const baseRevenue = player.revenue2023;
+      const generateTimeSeriesData = (baseValue, cagr, startYear = 2016, endYear = 2023) => {
+        const data = [];
+        for (let year = startYear; year <= endYear; year++) {
+          const value = baseValue * Math.pow(1 + cagr / 100, year - startYear);
+          data.push({
+            year,
+            value: Math.round(value * 100) / 100
+          });
+        }
+        return data;
+      };
+      const marketShare = player.marketShare;
+       // Generate time series data
+      // Generate growth data
+      const historicalData = generateTimeSeriesData(baseRevenue * 0.75, 8.5 + (index * 1.2));
+      const projectedData = generateTimeSeriesData(baseRevenue, 7.2 + (index * 0.8), 2024, 2027);
+      
+      return {
+        ...player,
+        id: `player-${index}`,
+        rank: index + 1,
+        marketPosition: index === 0 ? 'Leader' : index <= 2 ? 'Challenger' : index <= 4 ? 'Follower' : 'Niche',
+        growthRate: 7.2 + (index * 0.8),
+        historicalRevenue: historicalData,
+        projectedRevenue: projectedData,
+        // Additional competitive intelligence
+        geographicPresence: {
+          'North America': index <= 2 ? 'Strong' : index <= 4 ? 'Moderate' : 'Limited',
+          'Europe': index === 0 || index === 2 ? 'Strong' : index <= 3 ? 'Moderate' : 'Limited',
+          'Asia Pacific': index === 0 || index === 4 ? 'Strong' : 'Moderate',
+          'Latin America': index <= 1 ? 'Moderate' : 'Limited',
+          'MEA': index === 0 ? 'Moderate' : 'Limited'
+        },
+        competitiveStrengths: index === 0 ? 
+          ['Global brand recognition', 'Extensive R&D', 'Strong distribution network', 'Product portfolio breadth'] :
+          index === 1 ? 
+          ['Innovation leadership', 'Premium positioning', 'Scientific expertise', 'Regulatory expertise'] :
+          index === 2 ?
+          ['Cost-effective solutions', 'Market access', 'Local partnerships', 'Operational efficiency'] :
+          ['Specialized focus', 'Niche expertise', 'Agility', 'Customer relationships'],
+        marketFocus: index <= 2 ? 'Premium' : index <= 4 ? 'Mid-market' : 'Specialized',
+        threatLevel: index <= 2 ? 'High' : index <= 4 ? 'Medium' : 'Low'
+      };
+    });
+
+    return players;
+  }, [marketData]);
+
+  // Market concentration analysis - MOVED BEFORE EARLY RETURNS
+  const marketConcentration = useMemo(() => {
+    const top3Share = competitiveData.slice(0, 3).reduce((sum, player) => sum + player.marketShare, 0);
+    const top5Share = competitiveData.slice(0, 5).reduce((sum, player) => sum + player.marketShare, 0);
+    const hhi = competitiveData.reduce((sum, player) => sum + Math.pow(player.marketShare, 2), 0);
+    
+    return {
+      top3Share,
+      top5Share,
+      hhi,
+      concentration: hhi > 2500 ? 'Highly Concentrated' : hhi > 1500 ? 'Moderately Concentrated' : 'Competitive'
+    };
+  }, [competitiveData]);
+
+  // Geographic presence analysis - MOVED BEFORE EARLY RETURNS
+  const geographicAnalysis = useMemo(() => {
+    const regions = ['North America', 'Europe', 'Asia Pacific', 'Latin America', 'MEA'];
+    return regions.map(region => {
+      const strongPlayers = competitiveData.filter(p => p.geographicPresence[region] === 'Strong').length;
+      const moderatePlayers = competitiveData.filter(p => p.geographicPresence[region] === 'Moderate').length;
+      const limitedPlayers = competitiveData.filter(p => p.geographicPresence[region] === 'Limited').length;
+      
+      return {
+        region,
+        strong: strongPlayers,
+        moderate: moderatePlayers,
+        limited: limitedPlayers,
+        competitionLevel: strongPlayers >= 3 ? 'Intense' : strongPlayers >= 2 ? 'High' : strongPlayers >= 1 ? 'Moderate' : 'Low'
+      };
+    });
+  }, [competitiveData]);
+
   // Show loading state
   if (loading) {
     return (
@@ -96,76 +185,6 @@ const CompetitiveAnalysis = () => {
     );
   }
 
-  // Generate time series data
-  const generateTimeSeriesData = (baseValue, cagr, startYear = 2016, endYear = 2023) => {
-    const data = [];
-    for (let year = startYear; year <= endYear; year++) {
-      const value = baseValue * Math.pow(1 + cagr / 100, year - startYear);
-      data.push({
-        year,
-        value: Math.round(value * 100) / 100
-      });
-    }
-    return data;
-  };
-
-  // Enhanced competitive data with more details
-  const competitiveData = useMemo(() => {
-    if (!marketData?.marketPlayers) return [];
-    
-    const players = marketData.marketPlayers.map((player, index) => {
-      const baseRevenue = player.revenue2023;
-      const marketShare = player.marketShare;
-      
-      // Generate growth data
-      const historicalData = generateTimeSeriesData(baseRevenue * 0.75, 8.5 + (index * 1.2));
-      const projectedData = generateTimeSeriesData(baseRevenue, 7.2 + (index * 0.8), 2024, 2027);
-      
-      return {
-        ...player,
-        id: `player-${index}`,
-        rank: index + 1,
-        marketPosition: index === 0 ? 'Leader' : index <= 2 ? 'Challenger' : index <= 4 ? 'Follower' : 'Niche',
-        growthRate: 7.2 + (index * 0.8),
-        historicalRevenue: historicalData,
-        projectedRevenue: projectedData,
-        // Additional competitive intelligence
-        geographicPresence: {
-          'North America': index <= 2 ? 'Strong' : index <= 4 ? 'Moderate' : 'Limited',
-          'Europe': index === 0 || index === 2 ? 'Strong' : index <= 3 ? 'Moderate' : 'Limited',
-          'Asia Pacific': index === 0 || index === 4 ? 'Strong' : 'Moderate',
-          'Latin America': index <= 1 ? 'Moderate' : 'Limited',
-          'MEA': index === 0 ? 'Moderate' : 'Limited'
-        },
-        competitiveStrengths: index === 0 ? 
-          ['Global brand recognition', 'Extensive R&D', 'Strong distribution network', 'Product portfolio breadth'] :
-          index === 1 ? 
-          ['Innovation leadership', 'Premium positioning', 'Scientific expertise', 'Regulatory expertise'] :
-          index === 2 ?
-          ['Cost-effective solutions', 'Market access', 'Local partnerships', 'Operational efficiency'] :
-          ['Specialized focus', 'Niche expertise', 'Agility', 'Customer relationships'],
-        marketFocus: index <= 2 ? 'Premium' : index <= 4 ? 'Mid-market' : 'Specialized',
-        threatLevel: index <= 2 ? 'High' : index <= 4 ? 'Medium' : 'Low'
-      };
-    });
-
-    return players;
-  }, [marketData]);
-
-  // Market concentration analysis
-  const marketConcentration = useMemo(() => {
-    const top3Share = competitiveData.slice(0, 3).reduce((sum, player) => sum + player.marketShare, 0);
-    const top5Share = competitiveData.slice(0, 5).reduce((sum, player) => sum + player.marketShare, 0);
-    const hhi = competitiveData.reduce((sum, player) => sum + Math.pow(player.marketShare, 2), 0);
-    
-    return {
-      top3Share,
-      top5Share,
-      hhi,
-      concentration: hhi > 2500 ? 'Highly Concentrated' : hhi > 1500 ? 'Moderately Concentrated' : 'Competitive'
-    };
-  }, [competitiveData]);
-
   // Competitive positioning data
   const positioningData = competitiveData.map(player => ({
     name: player.name,
@@ -174,24 +193,6 @@ const CompetitiveAnalysis = () => {
     revenue: player.revenue2023,
     position: player.marketPosition
   }));
-
-  // Geographic presence analysis
-  const geographicAnalysis = useMemo(() => {
-    const regions = ['North America', 'Europe', 'Asia Pacific', 'Latin America', 'MEA'];
-    return regions.map(region => {
-      const strongPlayers = competitiveData.filter(p => p.geographicPresence[region] === 'Strong').length;
-      const moderatePlayers = competitiveData.filter(p => p.geographicPresence[region] === 'Moderate').length;
-      const limitedPlayers = competitiveData.filter(p => p.geographicPresence[region] === 'Limited').length;
-      
-      return {
-        region,
-        strong: strongPlayers,
-        moderate: moderatePlayers,
-        limited: limitedPlayers,
-        competitionLevel: strongPlayers >= 3 ? 'Intense' : strongPlayers >= 2 ? 'High' : strongPlayers >= 1 ? 'Moderate' : 'Low'
-      };
-    });
-  }, [competitiveData]);
 
   // Competitive insights
   const competitiveInsights = [
@@ -214,6 +215,7 @@ const CompetitiveAnalysis = () => {
       type: 'warning'
     }
   ];
+
 
   return (
     <DashboardLayout 

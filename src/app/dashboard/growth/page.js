@@ -53,6 +53,68 @@ const GrowthAnalysis = () => {
   const [selectedTimeframe, setSelectedTimeframe] = useState('full'); // full, short, long
   const [focusMetric, setFocusMetric] = useState('revenue'); // revenue, growth, penetration
 
+  // Generate time series data for market growth
+  const generateTimeSeriesData = (baseValue, cagr, startYear = 2024, endYear = 2032) => {
+    const data = [];
+    for (let year = startYear; year <= endYear; year++) {
+      const value = baseValue * Math.pow(1 + cagr / 100, year - startYear);
+      data.push({
+        year,
+        value: Math.round(value * 100) / 100
+      });
+    }
+    return data;
+  };
+
+  // Calculate scenario-based projections - MOVED BEFORE EARLY RETURNS
+  const getScenarioData = useMemo(() => {
+    if (!marketData?.overview) return { cagr: 0, marketSize2032: 0, timeSeriesData: [], totalGrowth: 0 };
+    
+    const modifier = scenarios[selectedScenario].modifier;
+    const baseCAGR = marketData.overview.cagr;
+    const adjustedCAGR = baseCAGR * modifier;
+    
+    return {
+      cagr: adjustedCAGR,
+      marketSize2032: marketData.overview.marketSizeBase * Math.pow(1 + adjustedCAGR / 100, 8) * modifier,
+      timeSeriesData: generateTimeSeriesData(marketData.overview.marketSizeBase, adjustedCAGR),
+      totalGrowth: ((marketData.overview.marketSizeBase * Math.pow(1 + adjustedCAGR / 100, 8) * modifier - marketData.overview.marketSizeBase) / marketData.overview.marketSizeBase) * 100
+    };
+  }, [selectedScenario, marketData]); 
+
+  // Calculate compound metrics - MOVED BEFORE EARLY RETURNS
+  const cumulativeGrowth = useMemo(() => {
+    return getScenarioData.timeSeriesData.map((point, index) => ({
+      year: point.year,
+      value: point.value,
+      growth: index > 0 ? ((point.value - getScenarioData.timeSeriesData[0].value) / getScenarioData.timeSeriesData[0].value) * 100 : 0,
+      yearOverYear: index > 0 ? ((point.value - getScenarioData.timeSeriesData[index - 1].value) / getScenarioData.timeSeriesData[index - 1].value) * 100 : 0
+    }));
+  }, [getScenarioData]);
+
+  // Regional growth comparison using real data - MOVED BEFORE EARLY RETURNS
+  const regionalGrowthData = useMemo(() => {
+    if (!marketData?.regions) return [];
+    
+    return marketData.regions.map(region => {
+      const startValue = (marketData.overview.marketSizeBase * region.marketShare2024) / 100;
+      const endValue = (marketData.overview.marketSizeForecast * region.marketShare2032) / 100;
+      const cagr = region.cagr;
+      
+      return {
+        region: region.name,
+        cagr,
+        startValue,
+        endValue,
+        totalGrowth: ((endValue - startValue) / startValue) * 100,
+        data: generateTimeSeriesData(startValue, cagr).map(point => ({ 
+          ...point, 
+          growth: ((point.value - startValue) / startValue) * 100 
+        }))
+      };
+    });
+  }, [marketData]);
+
   // Show loading state
   if (loading) {
     return (
@@ -97,35 +159,6 @@ const GrowthAnalysis = () => {
       </DashboardLayout>
     );
   }
-
-  // Generate time series data for market growth
-  const generateTimeSeriesData = (baseValue, cagr, startYear = 2024, endYear = 2032) => {
-    const data = [];
-    for (let year = startYear; year <= endYear; year++) {
-      const value = baseValue * Math.pow(1 + cagr / 100, year - startYear);
-      data.push({
-        year,
-        value: Math.round(value * 100) / 100
-      });
-    }
-    return data;
-  };
-
-  // Calculate scenario-based projections
-  const getScenarioData = useMemo(() => {
-    if (!marketData?.overview) return { cagr: 0, marketSize2032: 0, timeSeriesData: [], totalGrowth: 0 };
-    
-    const modifier = scenarios[selectedScenario].modifier;
-    const baseCAGR = marketData.overview.cagr;
-    const adjustedCAGR = baseCAGR * modifier;
-    
-    return {
-      cagr: adjustedCAGR,
-      marketSize2032: marketData.overview.marketSizeBase * Math.pow(1 + adjustedCAGR / 100, 8) * modifier,
-      timeSeriesData: generateTimeSeriesData(marketData.overview.marketSizeBase, adjustedCAGR),
-      totalGrowth: ((marketData.overview.marketSizeBase * Math.pow(1 + adjustedCAGR / 100, 8) * modifier - marketData.overview.marketSizeBase) / marketData.overview.marketSizeBase) * 100
-    };
-  }, [selectedScenario, marketData]); 
 
   // Growth drivers analysis
   const growthDrivers = [
@@ -211,39 +244,6 @@ const GrowthAnalysis = () => {
     }
   ];
 
-  // Calculate compound metrics
-  const cumulativeGrowth = useMemo(() => {
-    return getScenarioData.timeSeriesData.map((point, index) => ({
-      year: point.year,
-      value: point.value,
-      growth: index > 0 ? ((point.value - getScenarioData.timeSeriesData[0].value) / getScenarioData.timeSeriesData[0].value) * 100 : 0,
-      yearOverYear: index > 0 ? ((point.value - getScenarioData.timeSeriesData[index - 1].value) / getScenarioData.timeSeriesData[index - 1].value) * 100 : 0
-    }));
-  }, [getScenarioData]);
-
-  // Regional growth comparison using real data
-  const regionalGrowthData = useMemo(() => {
-    if (!marketData?.regions) return [];
-    
-    return marketData.regions.map(region => {
-      const startValue = (marketData.overview.marketSizeBase * region.marketShare2024) / 100;
-      const endValue = (marketData.overview.marketSizeForecast * region.marketShare2032) / 100;
-      const cagr = region.cagr;
-      
-      return {
-        region: region.name,
-        cagr,
-        startValue,
-        endValue,
-        totalGrowth: ((endValue - startValue) / startValue) * 100,
-        data: generateTimeSeriesData(startValue, cagr).map(point => ({ 
-          ...point, 
-          growth: ((point.value - startValue) / startValue) * 100 
-        }))
-      };
-    });
-  }, [marketData]);
-
   // Key growth insights
   const growthInsights = [
     {
@@ -293,6 +293,7 @@ const GrowthAnalysis = () => {
       regions: ["Asia Pacific", "Latin America", "Middle East & Africa"]
     }
   ];
+
 
   return (
     <DashboardLayout 

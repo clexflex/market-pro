@@ -1,3 +1,5 @@
+
+// market-pro/src/app/dashboard/explorer/page.js
 'use client';
 import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
@@ -53,51 +55,6 @@ const DataExplorer = () => {
     growthRate: 'all',
     year: '2032'
   });
-
-  // Show loading state
-  if (loading) {
-    return (
-      <DashboardLayout 
-        title="Data Explorer" 
-        breadcrumb={['Dashboard', 'Data Explorer']}
-      >
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <LoadingSpinner size="lg" className="mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Loading Data Explorer...
-            </h3>
-            <p className="text-gray-600">
-              Processing comprehensive dataset
-            </p>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  // Show error state
-  if (error) {
-    return (
-      <DashboardLayout 
-        title="Data Explorer" 
-        breadcrumb={['Dashboard', 'Data Explorer']}
-      >
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <div className="text-red-600 mb-4">⚠️</div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Failed to Load Data
-            </h3>
-            <p className="text-gray-600 mb-4">{error}</p>
-            <Button onClick={() => window.location.reload()}>
-              Retry
-            </Button>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
 
   // Generate comprehensive dataset from market data
   const generateDataset = useMemo(() => {
@@ -323,6 +280,28 @@ const DataExplorer = () => {
 
   const totalPages = Math.ceil(sortedData.length / itemsPerPage);
 
+  // Summary statistics
+  const summaryStats = useMemo(() => {
+    const totalMarketSize = sortedData.reduce((sum, item) => sum + item.marketSize2032, 0);
+    const averageCAGR = sortedData.reduce((sum, item) => sum + item.cagr, 0) / sortedData.length;
+    const highGrowthSegments = sortedData.filter(item => item.cagr >= 12).length;
+    
+    return {
+      totalRecords: sortedData.length,
+      totalMarketSize,
+      averageCAGR,
+      highGrowthSegments,
+      topPerformer: sortedData.reduce((max, item) => 
+        item.marketSize2032 > max.marketSize2032 ? item : max, sortedData[0] || {}
+      )
+    };
+  }, [sortedData]);
+
+  const debouncedSearch = debounce((value) => {
+    setSearchTerm(value);
+    setCurrentPage(1);
+  }, 300);
+
   // Handle sorting
   const handleSort = (field) => {
     if (sortField === field) {
@@ -356,28 +335,50 @@ const DataExplorer = () => {
     downloadCSV(exportData, 'market-data-analysis');
   };
 
-  // Summary statistics
-  const summaryStats = useMemo(() => {
-    const totalMarketSize = sortedData.reduce((sum, item) => sum + item.marketSize2032, 0);
-    const averageCAGR = sortedData.reduce((sum, item) => sum + item.cagr, 0) / sortedData.length;
-    const highGrowthSegments = sortedData.filter(item => item.cagr >= 12).length;
-    
-    return {
-      totalRecords: sortedData.length,
-      totalMarketSize,
-      averageCAGR,
-      highGrowthSegments,
-      topPerformer: sortedData.reduce((max, item) => 
-        item.marketSize2032 > max.marketSize2032 ? item : max, sortedData[0] || {}
-      )
-    };
-  }, [sortedData]);
+  // Show loading state
+  if (loading) {
+    return (
+      <DashboardLayout 
+        title="Data Explorer" 
+        breadcrumb={['Dashboard', 'Data Explorer']}
+      >
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <LoadingSpinner size="lg" className="mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Loading Data Explorer...
+            </h3>
+            <p className="text-gray-600">
+              Processing comprehensive dataset
+            </p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
-  const debouncedSearch = debounce((value) => {
-    setSearchTerm(value);
-    setCurrentPage(1);
-  }, 300);
-
+  // Show error state
+  if (error) {
+    return (
+      <DashboardLayout 
+        title="Data Explorer" 
+        breadcrumb={['Dashboard', 'Data Explorer']}
+      >
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="text-red-600 mb-4">⚠️</div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Failed to Load Data
+            </h3>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
   return (
     <DashboardLayout 
       title="Data Explorer" 
