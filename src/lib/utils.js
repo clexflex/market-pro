@@ -199,7 +199,7 @@ export const analyzeRegionalPerformance = (regionalData) => {
   };
 };
 
-export default {
+const UtilityFunctions = {
   cn,
   formatCurrency,
   formatPercentage,
@@ -214,3 +214,5 @@ export default {
   getMarketSegmentInsights,
   analyzeRegionalPerformance
 };
+
+export default UtilityFunctions;
