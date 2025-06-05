@@ -35,7 +35,8 @@ import {
   MarketGrowthChart
 } from '@/components/charts';
 import { useMarketData } from '@/hooks/useMarketData';
-import { formatCurrency, formatPercentage, generateTimeSeriesData } from '@/lib/utils';
+import { formatCurrency, formatPercentage } from '@/lib/utils';
+import { generateTimeSeriesData } from '@/data/marketData';
 
 const ExecutiveSummary = () => {
   const { data: marketData, loading, error } = useMarketData();
