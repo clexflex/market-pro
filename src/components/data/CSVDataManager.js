@@ -1,20 +1,20 @@
 // src/components/data/CSVDataManager.js
 'use client';
-import React, { useState, useCallback, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import {
-  Upload,
+  Database,
   FileText,
   Download,
   RefreshCw,
   CheckCircle,
-  AlertCircle,
-  Database,
-  Settings,
+  Info,
   BarChart3,
   TrendingUp,
   Calendar,
-  Users
+  Users,
+  Globe,
+  Package
 } from 'lucide-react';
 import { 
   Card, 
@@ -23,119 +23,28 @@ import {
   CardContent,
   Button,
   Alert,
-  Progress,
   Badge,
   Separator
 } from '@/components/ui';
-import { csvDataService } from '@/services/csvDataService';
+import { useMarketData } from '@/hooks/useMarketData';
 import { formatCurrency, formatPercentage, formatNumber } from '@/lib/utils';
 
 const CSVDataManager = ({ onDataUpdate }) => {
-  const [isLoading, setIsLoading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
+  const { data: marketData, loading, error, refreshData, isLoaded } = useMarketData();
   const [dataStats, setDataStats] = useState(null);
-  const [lastUpdated, setLastUpdated] = useState(null);
-  const [isDragOver, setIsDragOver] = useState(false);
 
-  // Check for existing data on component mount
+  // Generate statistics from market data
   useEffect(() => {
-    const existingData = csvDataService.getProcessedData();
-    if (existingData && Object.keys(existingData).length > 0) {
-      setDataStats(generateDataStats(existingData));
-      setLastUpdated(csvDataService.getLastUpdated());
-    }
-  }, []);
-
-  // Handle file upload and processing
-const handleFileUpload = useCallback(async (file) => {
-    setIsLoading(true);
-    setError(null);
-    setSuccess(null);
-    setUploadProgress(0);
-
-    try {
-      // Simulate upload progress
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return 90;
-          }
-          return prev + 10;
-        });
-      }, 200);
-
-      // Process the CSV file
-      const processedData = await csvDataService.loadCSVData(file);
-      
-      // Complete progress
-      clearInterval(progressInterval);
-      setUploadProgress(100);
-      
-      // Generate statistics
-      const stats = generateDataStats(processedData);
+    if (marketData && isLoaded) {
+      const stats = generateDataStats(marketData);
       setDataStats(stats);
-      setLastUpdated(new Date());
       
-      // Update parent component
+      // Notify parent component of data availability
       if (onDataUpdate) {
-        onDataUpdate(processedData);
+        onDataUpdate(marketData);
       }
-      
-      setSuccess(`Successfully processed ${stats.totalRecords} records from ${file.name}`);
-      
-      // Clear success message after 5 seconds
-      setTimeout(() => setSuccess(null), 5000);
-      
-    } catch (err) {
-      setError(`Failed to process CSV file: ${err.message}`);
-    } finally {
-      setIsLoading(false);
-      setTimeout(() => setUploadProgress(0), 2000);
     }
-  }, [onDataUpdate]);
-
-  // Handle file drop
-const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    
-    const files = Array.from(e.dataTransfer.files);
-    const csvFile = files.find(file => 
-      file.type === 'text/csv' || 
-      file.name.toLowerCase().endsWith('.csv')
-    );
-    
-    if (csvFile) {
-      handleFileUpload(csvFile);
-    } else {
-      setError('Please upload a valid CSV file');
-    }
-}, [handleFileUpload]);
-
-  // Handle drag over
-  const handleDragOver = useCallback((e) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  }, []);
-
-  // Handle drag leave
-  const handleDragLeave = useCallback((e) => {
-    e.preventDefault();
-    setIsDragOver(false);
-  }, []);
-
-  // Handle file input change
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      handleFileUpload(file);
-    }
-  };
-
-  
+  }, [marketData, isLoaded, onDataUpdate]);
 
   // Generate statistics from processed data
   const generateDataStats = (data) => {
@@ -151,7 +60,8 @@ const handleDrop = useCallback((e) => {
       marketSize2032: data.overview?.marketSizeForecast || 0,
       cagr: data.overview?.cagr || 0,
       yearRange: '2024-2032',
-      lastProcessed: new Date()
+      lastProcessed: new Date(),
+      dataSource: data.metadata?.dataSource || 'embedded-csv'
     };
 
     // Calculate total records from time series data
@@ -170,27 +80,16 @@ const handleDrop = useCallback((e) => {
 
   // Handle data refresh
   const handleRefresh = async () => {
-    setIsLoading(true);
-    setError(null);
-    
     try {
-      // This would refresh from the original source
-      // For now, we'll just simulate a refresh
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setSuccess('Data refreshed successfully');
-      setTimeout(() => setSuccess(null), 3000);
+      await refreshData();
     } catch (err) {
-      setError('Failed to refresh data');
-    } finally {
-      setIsLoading(false);
+      console.error('Failed to refresh data:', err);
     }
   };
 
   // Export current data
   const handleExport = () => {
-    const data = csvDataService.getProcessedData();
-    if (!data) {
-      setError('No data available to export');
+    if (!marketData) {
       return;
     }
 
@@ -198,13 +97,13 @@ const handleDrop = useCallback((e) => {
     const exportData = {
       metadata: {
         exportDate: new Date().toISOString(),
-        dataSource: 'CSV Upload',
-        lastUpdated: lastUpdated?.toISOString()
+        dataSource: 'Embedded CSV Data',
+        lastUpdated: dataStats?.lastProcessed?.toISOString()
       },
-      overview: data.overview,
-      regions: data.regions,
-      productTypes: data.productTypes,
-      ingredients: data.ingredients,
+      overview: marketData.overview,
+      regions: marketData.regions,
+      productTypes: marketData.productTypes,
+      ingredients: marketData.ingredients,
       statistics: dataStats
     };
 
@@ -220,77 +119,87 @@ const handleDrop = useCallback((e) => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-
-    setSuccess('Data exported successfully');
-    setTimeout(() => setSuccess(null), 3000);
   };
 
   return (
     <div className="space-y-6">
-      {/* Upload Section */}
+      {/* Data Status Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <Database className="w-5 h-5" />
-            <span>CSV Data Management</span>
+            <span>Market Data Status</span>
+            {isLoaded && (
+              <Badge variant="success" className="ml-auto">
+                Live Data Active
+              </Badge>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {/* File Upload Area */}
-          <div
-            className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors duration-200 ${
-              isDragOver 
-                ? 'border-primary-500 bg-primary-50' 
-                : 'border-gray-300 hover:border-gray-400'
-            }`}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-          >
-            <input
-              type="file"
-              accept=".csv"
-              onChange={handleFileChange}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              disabled={isLoading}
-            />
-            
-            <div className="space-y-4">
-              <div className="flex justify-center">
-                {isLoading ? (
-                  <RefreshCw className="w-12 h-12 text-primary-600 animate-spin" />
-                ) : (
-                  <Upload className="w-12 h-12 text-gray-400" />
-                )}
+          {/* Data Source Information */}
+          <div className="bg-gradient-to-r from-primary-50 to-secondary-50 rounded-lg p-6 mb-6">
+            <div className="flex items-start space-x-4">
+              <div className="w-12 h-12 bg-gradient-to-r from-primary-600 to-secondary-600 rounded-lg flex items-center justify-center">
+                <FileText className="w-6 h-6 text-white" />
               </div>
-              
-              <div>
+              <div className="flex-1">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  {isLoading ? 'Processing CSV Data...' : 'Upload Market Data CSV'}
+                  Embedded Market Research Data
                 </h3>
-                <p className="text-gray-600">
-                  Drag and drop your CSV file here, or click to browse
+                <p className="text-gray-600 mb-3">
+                  This dashboard is powered by real market research data that&lsquo;s embedded directly 
+                  in the application. No upload required - the data is always current and ready.
                 </p>
-                <p className="text-sm text-gray-500 mt-2">
-                  Supports CSV files with Region, Segment Type, Segment Name, Year, and Value columns
-                </p>
-              </div>
-              
-              {isLoading && uploadProgress > 0 && (
-                <div className="w-full max-w-md mx-auto">
-                  <Progress value={uploadProgress} className="h-2" />
-                  <p className="text-sm text-gray-600 mt-2">{uploadProgress}% complete</p>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="secondary">CSV-Powered</Badge>
+                  <Badge variant="secondary">Real-Time Processing</Badge>
+                  <Badge variant="secondary">Comprehensive Coverage</Badge>
                 </div>
-              )}
+              </div>
             </div>
           </div>
 
+          {/* Loading State */}
+          {loading && (
+            <div className="text-center py-8">
+              <RefreshCw className="w-8 h-8 text-primary-600 animate-spin mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Processing Market Data...
+              </h3>
+              <p className="text-gray-600">
+                Loading and analyzing comprehensive market research data
+              </p>
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && (
+            <Alert variant="error" className="mb-6">
+              <div>
+                <h4 className="font-semibold">Data Processing Error</h4>
+                <p>{error}</p>
+              </div>
+            </Alert>
+          )}
+
+          {/* Success State */}
+          {isLoaded && !loading && (
+            <Alert variant="success" className="mb-6">
+              <CheckCircle className="w-4 h-4" />
+              <div>
+                <h4 className="font-semibold">Data Successfully Loaded</h4>
+                <p>Market research data is active and all dashboard components are operational.</p>
+              </div>
+            </Alert>
+          )}
+
           {/* Action Buttons */}
-          <div className="flex flex-wrap gap-3 mt-6">
+          <div className="flex flex-wrap gap-3">
             <Button
               variant="outline"
               onClick={handleRefresh}
-              disabled={isLoading || !dataStats}
+              disabled={loading}
             >
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh Data
@@ -304,49 +213,9 @@ const handleDrop = useCallback((e) => {
               <Download className="w-4 h-4 mr-2" />
               Export Data
             </Button>
-            
-            <Button variant="outline" disabled>
-              <Settings className="w-4 h-4 mr-2" />
-              Configure
-            </Button>
           </div>
         </CardContent>
       </Card>
-
-      {/* Status Messages */}
-      <AnimatePresence>
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-          >
-            <Alert variant="error">
-              <AlertCircle className="w-4 h-4" />
-              <div>
-                <h4 className="font-semibold">Error</h4>
-                <p>{error}</p>
-              </div>
-            </Alert>
-          </motion.div>
-        )}
-
-        {success && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-          >
-            <Alert variant="success">
-              <CheckCircle className="w-4 h-4" />
-              <div>
-                <h4 className="font-semibold">Success</h4>
-                <p>{success}</p>
-              </div>
-            </Alert>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Data Statistics */}
       {dataStats && (
@@ -358,12 +227,10 @@ const handleDrop = useCallback((e) => {
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <BarChart3 className="w-5 h-5" />
-                <span>Data Overview</span>
-                {lastUpdated && (
-                  <Badge variant="secondary" className="ml-auto">
-                    Updated {lastUpdated.toLocaleTimeString()}
-                  </Badge>
-                )}
+                <span>Data Overview & Metrics</span>
+                <Badge variant="secondary" className="ml-auto">
+                  Processed {dataStats.lastProcessed.toLocaleTimeString()}
+                </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -374,7 +241,7 @@ const handleDrop = useCallback((e) => {
                   <div className="text-2xl font-bold text-blue-700">
                     {formatNumber(dataStats.totalRecords)}
                   </div>
-                  <div className="text-sm text-blue-600">Total Records</div>
+                  <div className="text-sm text-blue-600">Data Points</div>
                 </div>
 
                 {/* Market Size */}
@@ -397,7 +264,7 @@ const handleDrop = useCallback((e) => {
 
                 {/* Geographic Coverage */}
                 <div className="text-center p-4 bg-orange-50 rounded-lg">
-                  <Users className="w-8 h-8 text-orange-600 mx-auto mb-2" />
+                  <Globe className="w-8 h-8 text-orange-600 mx-auto mb-2" />
                   <div className="text-2xl font-bold text-orange-700">
                     {dataStats.regions}
                   </div>
@@ -457,6 +324,56 @@ const handleDrop = useCallback((e) => {
           </Card>
         </motion.div>
       )}
+
+      {/* Data Sources Information */}
+      <Card className="bg-gradient-to-r from-blue-50 to-indigo-50">
+        <CardHeader>
+          <CardTitle>Data Source Information</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h4 className="font-semibold text-gray-900 mb-3">Data Coverage</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center space-x-2">
+                  <Package className="w-4 h-4 text-blue-600" />
+                  <span>Global and regional market data</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Users className="w-4 h-4 text-blue-600" />
+                  <span>Comprehensive segment analysis</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Calendar className="w-4 h-4 text-blue-600" />
+                  <span>8-year forecast period (2024-2032)</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <TrendingUp className="w-4 h-4 text-blue-600" />
+                  <span>Real market research insights</span>
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <h4 className="font-semibold text-gray-900 mb-3">Technical Details</h4>
+              <div className="space-y-2 text-sm text-gray-600">
+                <div>
+                  <strong>Data Format:</strong> CSV processed to JSON
+                </div>
+                <div>
+                  <strong>Processing:</strong> Real-time on application load
+                </div>
+                <div>
+                  <strong>Storage:</strong> In-memory with caching
+                </div>
+                <div>
+                  <strong>Updates:</strong> Embedded with application builds
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

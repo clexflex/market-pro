@@ -1,3 +1,4 @@
+// src/app/dashboard/page.js
 'use client';
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
@@ -23,7 +24,8 @@ import {
   CardContent,
   Badge,
   Button,
-  Progress 
+  Progress,
+  LoadingSpinner
 } from '@/components/ui';
 import {
   EnhancedLineChart,
@@ -32,16 +34,11 @@ import {
   MarketShareDonut,
   MarketGrowthChart
 } from '@/components/charts';
-import { 
-  marketData, 
-  regionalMarketData, 
-  productTypeData, 
-  ingredientData,
-  generateTimeSeriesData 
-} from '@/data/marketData';
-import { formatCurrency, formatPercentage, calculateCAGR } from '@/lib/utils';
+import { useMarketData } from '@/hooks/useMarketData';
+import { formatCurrency, formatPercentage, generateTimeSeriesData } from '@/lib/utils';
 
 const ExecutiveSummary = () => {
+  const { data: marketData, loading, error } = useMarketData();
   const [selectedMetric, setSelectedMetric] = useState('revenue');
   const [animationKey, setAnimationKey] = useState(0);
 
@@ -49,15 +46,66 @@ const ExecutiveSummary = () => {
     setAnimationKey(prev => prev + 1);
   }, [selectedMetric]);
 
+  // Show loading state
+  if (loading) {
+    return (
+      <DashboardLayout 
+        title="Executive Summary" 
+        breadcrumb={['Dashboard', 'Executive Summary']}
+      >
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <LoadingSpinner size="lg" className="mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Loading Market Data...
+            </h3>
+            <p className="text-gray-600">
+              Processing comprehensive market research data
+            </p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <DashboardLayout 
+        title="Executive Summary" 
+        breadcrumb={['Dashboard', 'Executive Summary']}
+      >
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="text-red-600 mb-4">⚠️</div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Failed to Load Data
+            </h3>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Extract data from marketData
+  const overview = marketData?.overview || {};
+  const regions = marketData?.regions || [];
+  const productTypes = marketData?.productTypes || [];
+  const ingredients = marketData?.ingredients || [];
+
   // Calculate key metrics
   const currentYear = 2024;
   const forecastYear = 2032;
-  const globalMarketSize2024 = marketData.overview.marketSizeBase;
-  const globalMarketSize2032 = marketData.overview.marketSizeForecast;
-  const marketCAGR = marketData.overview.cagr;
+  const globalMarketSize2024 = overview.marketSizeBase || 0;
+  const globalMarketSize2032 = overview.marketSizeForecast || 0;
+  const marketCAGR = overview.cagr || 0;
   
   // Regional data for 2032
-  const regionalData2032 = marketData.regions.map(region => ({
+  const regionalData2032 = regions.map(region => ({
     name: region.name,
     value: (globalMarketSize2032 * region.marketShare2032) / 100,
     share: region.marketShare2032,
@@ -65,26 +113,26 @@ const ExecutiveSummary = () => {
   })).sort((a, b) => b.value - a.value);
 
   // Product type data
-  const productTypeData2032 = marketData.productTypes.map(product => ({
+  const productTypeData2032 = productTypes.map(product => ({
     name: product.name,
     value: (globalMarketSize2032 * product.marketShare2032) / 100,
     share: product.marketShare2032
   }));
 
   // Ingredient data
-  const ingredientData2032 = marketData.ingredients.map(ingredient => ({
+  const ingredientData2032 = ingredients.slice(0, 5).map(ingredient => ({
     name: ingredient.name,
     value: (globalMarketSize2032 * ingredient.marketShare2032) / 100,
     share: ingredient.marketShare2032
-  })).slice(0, 5); // Top 5 ingredients
+  }));
 
   // Generate market trend data
   const marketTrendData = generateTimeSeriesData(globalMarketSize2024, marketCAGR);
 
   // Key insights calculations
-  const totalGrowth = ((globalMarketSize2032 - globalMarketSize2024) / globalMarketSize2024) * 100;
-  const leadingRegion = regionalData2032[0];
-  const fastestGrowingRegion = marketData.regions.reduce((a, b) => a.cagr > b.cagr ? a : b);
+  const totalGrowth = globalMarketSize2024 > 0 ? ((globalMarketSize2032 - globalMarketSize2024) / globalMarketSize2024) * 100 : 0;
+  const leadingRegion = regionalData2032[0] || { name: 'N/A', share: 0, cagr: 0 };
+  const fastestGrowingRegion = regions.reduce((a, b) => (a.cagr || 0) > (b.cagr || 0) ? a : b, { name: 'N/A', cagr: 0 });
 
   const keyMetrics = [
     {
@@ -107,7 +155,7 @@ const ExecutiveSummary = () => {
       title: 'Leading Region',
       value: leadingRegion.name,
       subtitle: `${formatPercentage(leadingRegion.share)} market share`,
-      trend: leadingRegion.cagr,
+      trend: leadingRegion.cagr || 0,
       icon: Globe,
       color: 'from-purple-500 to-purple-600'
     },
@@ -125,7 +173,7 @@ const ExecutiveSummary = () => {
     {
       title: 'Market Drivers',
       icon: Zap,
-      items: [
+      items: overview.keyDrivers || [
         'Rising aesthetic consciousness among consumers',
         'Increasing disposable income in emerging markets',
         'Technological advancements in treatment methods',
@@ -171,14 +219,14 @@ const ExecutiveSummary = () => {
         >
           <div className="flex flex-col md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-2xl font-bold mb-2">Global Skin Boosters Market</h2>
+              <h2 className="text-2xl font-bold mb-2">{overview.marketName || 'Global Skin Boosters Market'}</h2>
               <p className="text-primary-100 mb-4">
-                Comprehensive market analysis and forecasting for {currentYear}-{forecastYear}
+                Real-time market analysis and forecasting for {currentYear}-{forecastYear}
               </p>
               <div className="flex flex-wrap gap-4">
                 <div className="flex items-center space-x-2">
                   <BarChart3 className="w-5 h-5" />
-                  <span className="font-medium">Market Research Report</span>
+                  <span className="font-medium">Live Data Dashboard</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <Globe className="w-5 h-5" />
@@ -192,8 +240,11 @@ const ExecutiveSummary = () => {
             </div>
             <div className="mt-4 md:mt-0">
               <div className="text-right">
-                <p className="text-primary-100 text-sm">Report Date</p>
-                <p className="font-semibold">December 2024</p>
+                <p className="text-primary-100 text-sm">Data Status</p>
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                  <p className="font-semibold text-green-200">Live & Current</p>
+                </div>
               </div>
             </div>
           </div>
@@ -348,14 +399,14 @@ const ExecutiveSummary = () => {
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-purple-600">
-                    {marketData.regions.length}
+                    {regions.length}
                   </div>
                   <div className="text-sm text-gray-600">Key Regions</div>
                   <Progress value={75} className="mt-2" />
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-orange-600">
-                    {marketData.marketPlayers.length - 1}+
+                    {marketData?.marketPlayers?.length || 0}+
                   </div>
                   <div className="text-sm text-gray-600">Market Players</div>
                   <Progress value={60} className="mt-2" />
@@ -372,10 +423,10 @@ const ExecutiveSummary = () => {
                     • <strong>{fastestGrowingRegion.name}</strong> shows fastest growth at {formatPercentage(fastestGrowingRegion.cagr)} CAGR
                   </div>
                   <div>
-                    • <strong>Mesotherapy</strong> leads product category with {formatPercentage(productTypeData2032[0].share)} share
+                    • <strong>{productTypes[0]?.name || 'Leading Product'}</strong> leads product category with {formatPercentage(productTypes[0]?.marketShare2032 || 0)} share
                   </div>
                   <div>
-                    • <strong>Hyaluronic Acid</strong> dominates ingredient segment with {formatPercentage(ingredientData2032[0].share)} share
+                    • <strong>{ingredients[0]?.name || 'Leading Ingredient'}</strong> dominates ingredient segment with {formatPercentage(ingredients[0]?.marketShare2032 || 0)} share
                   </div>
                 </div>
               </div>
